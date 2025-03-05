@@ -1,80 +1,56 @@
-// Load environment variables from .env file
 require('dotenv').config();
+console.log(process.env.TOKEN);  // This should print the bot token to the console
 
-const axios = require('axios'); // Import Axios for HTTP requests
 const { Client, GatewayIntentBits } = require('discord.js');
+const express = require('express');
 
-// Create a new client instance with the necessary intents
+// Create a basic web server to prevent sleeping (useful for Replit, UptimeRobot, etc.)
+const app = express();
+app.get('/', (req, res) => {
+  res.send('Bot is running...');
+});
+app.listen(3000, () => console.log('Web server is live!'));
+
+// Create a new client instance with necessary intents
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildPresences, // Enable presence tracking (to detect online/offline/idle)
+    GatewayIntentBits.GuildPresences, // Enable presence tracking
   ],
 });
 
-// Function to check network connectivity by pinging a website
-const checkNetworkConnection = async () => {
-  try {
-    const response = await axios.get('https://www.google.com');
-    console.log('Network connection successful:', response.status);
-    return true;  // Network connection is successful
-  } catch (error) {
-    console.error('Network connection failed:', error.message);
-    return false;  // Network connection failed
+// Define the user IDs to track
+const trackedUserIds = ['856280684476629063', '637527706803896340', '451233781760917524']; 
+
+// When bot is ready
+client.once('ready', () => {
+  console.log(`✅ Logged in as ${client.user.tag}`);
+});
+
+// Handle presence updates
+client.on('presenceUpdate', (oldPresence, newPresence) => {
+  if (!newPresence || !newPresence.user) return;
+
+  const userId = newPresence.user.id;
+  if (trackedUserIds.includes(userId)) {
+    const status = newPresence.status || 'unknown';
+    console.log(`${newPresence.user.tag} is now ${status}`);
+
+    // Send update to a specific channel
+    const channel = client.channels.cache.get('855621950347804672');
+    if (channel) {
+      channel.send(`${newPresence.user.tag} is now ${status}`);
+    }
   }
-};
+});
 
-// Log when the bot starts
-console.log('Bot is starting...');
+// Error handling to prevent crashes
+client.on('error', (error) => console.error('❌ Bot Error:', error));
+client.on('warn', (warning) => console.warn('⚠️ Warning:', warning));
+client.on('disconnect', () => console.log('🔄 Bot disconnected, attempting to reconnect...'));
 
-// Function to login the bot with retry logic
-async function loginBot() {
-  try {
-    await client.login(process.env.TOKEN);  // Try logging in
-    console.log('Bot logged in successfully');
-  } catch (err) {
-    console.error('Login failed. Retrying...', err);
-    setTimeout(loginBot, 5000);  // Retry after 5 seconds if login fails
-  }
-}
-
-// Check network connection before attempting to log in
-checkNetworkConnection().then(isConnected => {
-  if (isConnected) {
-    // Initialize the bot when the network connection is successful
-    client.once('ready', () => {
-      console.log(`Logged in as ${client.user.tag}`);
-    });
-
-    // Listen to presence updates (detect when a user changes status)
-    client.on('presenceUpdate', (oldPresence, newPresence) => {
-      console.log('Presence update detected');  // Debugging log
-
-      // Define the tracked user IDs
-      const trackedUserIds = ['856280684476629063', '637527706803896340'];  // Replace with actual user IDs
-
-      // Check if the updated user's ID matches either of the two tracked user IDs
-      if (trackedUserIds.includes(newPresence.user.id)) {
-        // If there's no oldPresence or the status has changed
-        if (!oldPresence || oldPresence.status !== newPresence.status) {
-          const user = newPresence.user; // Get the user who changed their status
-          const status = newPresence.status; // Get the new status (online, idle, offline, dnd)
-
-          console.log(`${user.tag} is now ${status}`);
-
-          // Send the status change message to a specific channel (replace YOUR_CHANNEL_ID)
-          const channel = client.channels.cache.get('YOUR_CHANNEL_ID'); // Replace with actual channel ID
-          if (channel) {
-            channel.send(`${user.tag} is now ${status}`);
-          }
-        }
-      }
-    });
-
-    // Attempt to login to Discord
-    loginBot();
-  } else {
-    console.error('Unable to connect to the internet. Please check your network.');
-  }
+// Log in using token
+client.login(process.env.TOKEN).catch((err) => {
+  console.error('❌ Failed to log in:', err);
 });
